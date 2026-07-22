@@ -2,6 +2,10 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+# Non-interactive shells don't source ~/.bashrc, so make sure tools installed
+# there (uv/uvx, the ollama binary) resolve regardless of the invoking shell.
+export PATH="$HOME/.local/bin:$HOME/.local/ollama/bin:$PATH"
+
 if ! curl -sf http://127.0.0.1:11434 >/dev/null 2>&1; then
   echo "Starting Ollama..."
   if command -v systemctl >/dev/null && systemctl --user list-unit-files ollama.service >/dev/null 2>&1; then

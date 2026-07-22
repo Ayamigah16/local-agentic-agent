@@ -1,26 +1,3 @@
 {
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/home/abrahamayamigah/projects/local-agentic-agent"
-      ]
-    },
-    "github": {
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${GITHUB_TOKEN}"
-      }
-    },
-    "aws": {
-      "command": "uvx",
-      "args": ["awslabs.aws-api-mcp-server@latest"],
-      "env": {
-        "AWS_REGION": "us-east-1",
-        "READ_OPERATIONS_ONLY": "true"
-      }
-    }
-  }
+  "mcpServers": {}
 }

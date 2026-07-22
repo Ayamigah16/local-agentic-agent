@@ -56,6 +56,24 @@ Switch models with `--model`:
 Note: qwen3.6 (Qwen's newest generation) only ships in 27B+ sizes, which don't fit in
 16GB of RAM without a GPU — that's why this setup uses regular Qwen3 instead.
 
+## Tool count vs. speed
+
+Every tool's schema — MCP or built-in — gets sent to the model on *every* turn. On
+CPU-only inference, more tools means a longer prompt means a slower response, regardless
+of whether that tool came from MCP or was hand-written. This isn't an MCP-specific cost;
+it's a straight token-count cost.
+
+Given that, **prefer `run_shell` + an existing CLI over adding a new MCP server** when a
+good CLI already exists (`aws`, `gh`, `vercel`, etc.) — one generic shell tool costs far
+less prompt budget than a dedicated MCP server's full tool catalog (the filesystem MCP
+server alone exposed 14 tools; `read_file`/`write_file`/`run_shell` cover the same ground
+for a fraction of the token cost). Reach for MCP only when there's no reasonable CLI, or
+when you specifically need MCP-native structured output.
+
+`mcp_servers.json` ships with `"mcpServers": {}` — no servers connected by default — for
+exactly this reason. See "Currently configured integrations" below for what's active and
+how.
+
 ## Adding MCP servers
 
 Edit `mcp_servers.json` (same `mcpServers` format as Claude Desktop/Claude Code):
@@ -113,13 +131,20 @@ TokenApiTool(
 
 ### Currently configured integrations
 
+No MCP servers are connected by default (`mcp_servers.json` is `{"mcpServers": {}}`).
+Instead:
+
 | Service | Path | Auth |
 | --- | --- | --- |
-| Filesystem | MCP (stdio, `npx`) | none — scoped to this project dir |
-| AWS | MCP (stdio, `uvx`) | existing `~/.aws/credentials` / CLI profile chain; read-only by default (`READ_OPERATIONS_ONLY=true` in `mcp_servers.json` — remove to allow writes) |
-| GitHub | MCP (HTTP, hosted) | `GITHUB_TOKEN` in `.env` |
-| Figma | direct API tool | `FIGMA_TOKEN` in `.env` |
-| Vercel | direct API tool | `VERCEL_TOKEN` in `.env` |
+| Filesystem | built-in `read_file`/`write_file`/`run_shell` | none — writes/commands ask `[y/N]` first |
+| AWS | `run_shell` + `aws` CLI | existing `~/.aws/credentials` / CLI profile chain (already configured on this machine) |
+| GitHub | `run_shell` + `gh` CLI | already authenticated on this machine (`gh auth status`) |
+| Figma | direct API tool (`token_api_tools.py`) | `FIGMA_TOKEN` in `.env` |
+| Vercel | direct API tool (`token_api_tools.py`) | `VERCEL_TOKEN` in `.env` |
+
+Figma and Vercel stay as dedicated tools rather than `run_shell` + `curl` because there's
+no CLI for either — a direct API tool is still cheaper than an MCP server here, just not
+as cheap as reusing an existing CLI.
 
 ### Not yet wired up — needs your CLI login first
 

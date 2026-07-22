@@ -3,6 +3,8 @@
 import asyncio
 import json
 
+import requests
+
 from .mcp_client import MCPManager
 from .ollama_client import OllamaClient
 from .skills import Skill, catalog_summary
@@ -60,7 +62,11 @@ async def _run_turn(
     mcp: MCPManager | None,
 ) -> None:
     for _ in range(MAX_TOOL_ITERATIONS):
-        reply = await asyncio.to_thread(client.chat, messages, tool_schemas)
+        try:
+            reply = await asyncio.to_thread(client.chat, messages, tool_schemas)
+        except requests.RequestException as e:
+            print(f"\n[error] Ollama request failed: {e}\n")
+            return
 
         tool_calls = reply.get("tool_calls")
         if not tool_calls:
