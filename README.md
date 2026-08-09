@@ -19,13 +19,15 @@ launches the agent REPL. Type a task at the `>` prompt; type `exit` to quit.
 
 - **`agent/ollama_client.py`** — thin wrapper over Ollama's `/api/chat` endpoint
   (tool-calling enabled, `num_thread` tuned to use all CPU cores).
-- **`agent/skills.py`** — loads [Agent Skills](vendor/agent-skills) (`SKILL.md` files:
-  YAML frontmatter + a workflow description). Their names and one-line descriptions go
-  into the system prompt; full instructions are only loaded on demand.
-- **`agent/tools.py`** — built-in tools: `load_skill`, `read_file`, `write_file`,
-  `run_shell`, plus whatever's registered in `agent/token_api_tools.py` (currently
-  `figma_api_get`, `vercel_api_get`). Writes and shell commands ask for `[y/N]`
-  confirmation in the terminal before running.
+- **`agent/skills.py`** — loads Agent Skills (`SKILL.md` files: YAML frontmatter + a
+  workflow description) from a directory. `main.py` loads two tiers: a small "primary"
+  catalog whose names/descriptions get inlined into the system prompt, and a much larger
+  "full" catalog (primary + everything else) that's only searchable on demand via
+  `search_skills` — see "Skills" below for why.
+- **`agent/tools.py`** — built-in tools: `load_skill`, `search_skills`, `read_file`,
+  `write_file`, `run_shell`, plus whatever's registered in `agent/token_api_tools.py`
+  (currently `figma_api_get`, `vercel_api_get`). Writes and shell commands ask for
+  `[y/N]` confirmation in the terminal before running.
 - **`agent/token_api_tools.py`** — declarative registry for "GET a REST API with a
   personal access token" tools. Add an entry here (base URL, token env var, header
   format) instead of hand-writing a new function each time — see below.
@@ -166,9 +168,20 @@ Once any of these is set up on your end, tell me and I'll wire up the correspond
 
 ## Skills
 
-Skills come from a fork of [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills)
-([`Ayamigah16/agent-skills`](https://github.com/Ayamigah16/agent-skills)), vendored as a
-git submodule at `vendor/agent-skills/`.
+Skills come from two forks, both vendored as git submodules:
+
+| Submodule | Upstream | Skills | Role |
+| --- | --- | --- | --- |
+| `vendor/agent-skills` | [`addyosmani/agent-skills`](https://github.com/addyosmani/agent-skills) | 25 | general engineering workflows — **primary** (inlined) |
+| `vendor/awesome-codex-skills` | [`composio-community/awesome-codex-skills`](https://github.com/composio-community/awesome-codex-skills) | 48 top-level + 832 under `composio-skills/` | general skills are **primary**; the 832 `composio-skills/*` are one-per-SaaS-tool automations — too narrow and numerous to inline |
+
+`main.py`'s `load_catalogs()` merges the two general sets into a 73-skill **primary**
+catalog (inlined into the system prompt — see "Tool count vs. speed" above for why this
+stays small on purpose) and merges that with the 832 Composio skills into a 905-skill
+**full** catalog. `load_skill` and `search_skills` operate on the full catalog, so nothing
+is unreachable — the split only controls what's visible by default vs. found by keyword
+search. If you add a third skill source with the same "many narrow skills" shape, wire it
+into the `full` side only, not `primary`.
 
 Cloning this repo for the first time:
 
@@ -182,11 +195,11 @@ If you already cloned without that flag:
 git submodule update --init
 ```
 
-To pull upstream (`addyosmani/agent-skills`) updates into the fork, then bump this repo's
-pinned submodule commit:
+To pull upstream updates into a fork and bump this repo's pinned submodule commit
+(same steps for either submodule):
 
 ```bash
-cd vendor/agent-skills && git pull upstream main && git push
+cd vendor/agent-skills && git pull upstream main && git push   # or: vendor/awesome-codex-skills, upstream master
 cd ../.. && git add vendor/agent-skills && git commit -m "Bump agent-skills submodule"
 ```
 

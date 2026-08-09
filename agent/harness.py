@@ -13,7 +13,7 @@ from .tools import build_tool_schemas, dispatch_tool_call
 MAX_TOOL_ITERATIONS = 8
 
 
-def build_system_prompt(catalog: dict[str, Skill], has_mcp: bool) -> str:
+def build_system_prompt(primary_catalog: dict[str, Skill], has_mcp: bool) -> str:
     mcp_note = (
         " Some tools come from connected MCP servers (prefixed mcp_) — use them "
         "like any other tool."
@@ -22,8 +22,11 @@ def build_system_prompt(catalog: dict[str, Skill], has_mcp: bool) -> str:
     )
     return (
         "You are a local coding agent running on the user's machine.\n\n"
-        "Available skills (each encodes a workflow for a specific kind of task):\n"
-        f"{catalog_summary(catalog)}\n\n"
+        "Commonly relevant skills (each encodes a workflow for a specific kind of "
+        "task):\n"
+        f"{catalog_summary(primary_catalog)}\n\n"
+        "This is not the full catalog — for specialized or third-party integration "
+        "tasks (e.g. a specific SaaS tool), call search_skills with a keyword first. "
         "Before starting non-trivial work, call load_skill with the name of the "
         "skill that best matches the task, then follow its process. You also have "
         "read_file, write_file, and run_shell tools to inspect and modify the "
@@ -42,7 +45,7 @@ def _normalize_tool_call_args(tool_calls: list[dict]) -> None:
             call["function"]["arguments"] = json.loads(args)
 
 
-async def _execute_tool_call(call: dict, catalog: dict[str, Skill], mcp: MCPManager | None) -> dict:
+async def _execute_tool_call(call: dict, full_catalog: dict[str, Skill], mcp: MCPManager | None) -> dict:
     fn = call["function"]
     name = fn["name"]
     args = fn["arguments"]
@@ -50,7 +53,7 @@ async def _execute_tool_call(call: dict, catalog: dict[str, Skill], mcp: MCPMana
     if mcp and mcp.has_tool(name):
         result = await mcp.call_tool(name, args)
     else:
-        result = dispatch_tool_call(name, args, catalog)
+        result = dispatch_tool_call(name, args, full_catalog)
     return {"role": "tool", "tool_name": name, "content": result}
 
 
@@ -58,7 +61,7 @@ async def _run_turn(
     client: OllamaClient,
     tool_schemas: list[dict],
     messages: list[dict],
-    catalog: dict[str, Skill],
+    full_catalog: dict[str, Skill],
     mcp: MCPManager | None,
 ) -> None:
     for _ in range(MAX_TOOL_ITERATIONS):
@@ -78,19 +81,29 @@ async def _run_turn(
         messages.append(reply)
 
         for call in tool_calls:
-            messages.append(await _execute_tool_call(call, catalog, mcp))
+            messages.append(await _execute_tool_call(call, full_catalog, mcp))
 
     print("\n[stopped: too many tool iterations for this turn]\n")
 
 
-async def run_repl(client: OllamaClient, catalog: dict[str, Skill], mcp: MCPManager | None = None) -> None:
-    tool_schemas = build_tool_schemas(catalog)
+async def run_repl(
+    client: OllamaClient,
+    primary_catalog: dict[str, Skill],
+    full_catalog: dict[str, Skill],
+    mcp: MCPManager | None = None,
+) -> None:
+    tool_schemas = build_tool_schemas()
     if mcp:
         tool_schemas += mcp.tool_schemas()
-    messages = [{"role": "system", "content": build_system_prompt(catalog, has_mcp=bool(mcp))}]
+    messages = [
+        {"role": "system", "content": build_system_prompt(primary_catalog, has_mcp=bool(mcp))}
+    ]
 
     mcp_count = len(mcp.tool_schemas()) if mcp else 0
-    print(f"Local agent ready (model={client.model}, {len(catalog)} skills, {mcp_count} MCP tools).")
+    print(
+        f"Local agent ready (model={client.model}, {len(primary_catalog)} skills listed, "
+        f"{len(full_catalog)} searchable, {mcp_count} MCP tools)."
+    )
     print("Type your task, or 'exit' to quit.\n")
 
     while True:
@@ -104,4 +117,4 @@ async def run_repl(client: OllamaClient, catalog: dict[str, Skill], mcp: MCPMana
             continue
 
         messages.append({"role": "user", "content": user_input})
-        await _run_turn(client, tool_schemas, messages, catalog, mcp)
+        await _run_turn(client, tool_schemas, messages, full_catalog, mcp)

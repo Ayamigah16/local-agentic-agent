@@ -40,3 +40,20 @@ def catalog_summary(catalog: dict[str, Skill]) -> str:
         first_sentence = skill.description.split(". ")[0].rstrip(".")
         lines.append(f"- {skill.name}: {first_sentence}")
     return "\n".join(lines)
+
+
+def merge_catalogs(*catalogs: dict[str, Skill]) -> dict[str, Skill]:
+    merged: dict[str, Skill] = {}
+    for catalog in catalogs:
+        merged.update(catalog)
+    return merged
+
+
+def search_skills(catalog: dict[str, Skill], query: str, limit: int = 15) -> list[Skill]:
+    needle = query.lower()
+    matches = [
+        skill
+        for skill in catalog.values()
+        if needle in skill.name.lower() or needle in skill.description.lower()
+    ]
+    return matches[:limit]

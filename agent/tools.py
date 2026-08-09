@@ -3,29 +3,45 @@
 import subprocess
 from pathlib import Path
 
-from .skills import Skill
+from .skills import Skill, search_skills
 from .token_api_tools import TOKEN_API_TOOLS
 
 SHELL_TIMEOUT_SECONDS = 60
 
 
-def build_tool_schemas(catalog: dict[str, Skill]) -> list[dict]:
+def build_tool_schemas() -> list[dict]:
     return [
         {
             "type": "function",
             "function": {
                 "name": "load_skill",
-                "description": "Load the full instructions for a named skill from the skill catalog.",
+                "description": (
+                    "Load the full instructions for a named skill. Use an exact name "
+                    "from the visible skill list, or one found via search_skills."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "name": {
-                            "type": "string",
-                            "enum": list(catalog.keys()),
-                            "description": "Exact skill name from the catalog.",
-                        }
+                        "name": {"type": "string", "description": "Exact skill name."}
                     },
                     "required": ["name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_skills",
+                "description": (
+                    "Search the full skill catalog (including specialized/third-party "
+                    "skills not listed in the system prompt) by keyword, matching "
+                    "against skill names and descriptions. Use this before assuming no "
+                    "skill covers a specific task — e.g. a specific SaaS integration."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
                 },
             },
         },
@@ -87,8 +103,15 @@ def _resolve(path_str: str) -> Path:
 def _load_skill(args: dict, catalog: dict[str, Skill]) -> str:
     skill = catalog.get(args["name"])
     if skill is None:
-        return f"Error: no skill named '{args['name']}' in the catalog."
+        return f"Error: no skill named '{args['name']}' in the catalog. Try search_skills."
     return skill.body
+
+
+def _search_skills(args: dict, catalog: dict[str, Skill]) -> str:
+    matches = search_skills(catalog, args["query"])
+    if not matches:
+        return "No matching skills found. Try broader or different keywords."
+    return "\n".join(f"- {skill.name}: {skill.description.split('. ')[0]}" for skill in matches)
 
 
 def _read_file(args: dict, catalog: dict[str, Skill]) -> str:
@@ -129,6 +152,7 @@ def _run_shell(args: dict, catalog: dict[str, Skill]) -> str:
 
 _HANDLERS = {
     "load_skill": _load_skill,
+    "search_skills": _search_skills,
     "read_file": _read_file,
     "write_file": _write_file,
     "run_shell": _run_shell,

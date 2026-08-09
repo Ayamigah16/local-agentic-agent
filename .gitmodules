@@ -1,3 +1,6 @@
 [submodule "vendor/agent-skills"]
 	path = vendor/agent-skills
 	url = https://github.com/Ayamigah16/agent-skills
+[submodule "vendor/awesome-codex-skills"]
+	path = vendor/awesome-codex-skills
+	url = https://github.com/Ayamigah16/awesome-codex-skills
